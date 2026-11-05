@@ -15,7 +15,7 @@ The plugin uses a Linear personal API key. It reads `LINEAR_API_KEY` from the en
 
 ## Options
 
-Pass options through the object form in `cli.json`:
+To set options, load the plugin from `cli.json` with the object form, instead of through the symlink below:
 
 ```json
 { "plugins": [{ "package": "/path/to/opencode-linear-pins", "options": { "max": 5, "position": "bottom" } }] }
