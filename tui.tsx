@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/tui/context"
 import { RGBA } from "@opentui/core"
 import { spawn } from "node:child_process"
 import { createSignal, For, Show } from "solid-js"
-import { age, isStale, type Pin } from "./pins.ts"
+import { isStale, stateStyle, type Pin } from "./pins.ts"
 import { LinearTodosRpc } from "./rpc.ts"
 
 // Theme error colors can be soft (some are pastel pinks), so overdue pins use a fixed, loud red.
@@ -157,8 +157,24 @@ function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
           <For each={items()}>
             {(pin) => {
               const overdue = () => isStale(pin, todos.now())
-              const since = () => age(todos.now() - pin.pinnedAt)
-              const detail = () => (overdue() ? `⚠ OVERDUE · pinned ${since()} ago · ${pin.stateName}` : `${pin.stateName} · pinned ${since()} ago`)
+              const state = () => {
+                const style = stateStyle(pin)
+                return (
+                  <span style={{ fg: RGBA.fromHex(style.color) }}>
+                    {overdue() ? <b>{`${style.icon} ${pin.stateName}`}</b> : `${style.icon} ${pin.stateName}`}
+                  </span>
+                )
+              }
+              const detail = () =>
+                overdue() ? (
+                  <>
+                    <b>⚠ OVERDUE</b>
+                    {" · "}
+                    {state()}
+                  </>
+                ) : (
+                  state()
+                )
               const id = () =>
                 overdue() ? (
                   <span style={{ fg: ON_URGENT, bg: URGENT }}>
@@ -179,7 +195,7 @@ function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
                         {id()}
                         {title()}
                       </text>
-                      <text fg={overdue() ? URGENT : theme.text.muted}>{overdue() ? <b>{detail()}</b> : detail()}</text>
+                      <text fg={overdue() ? URGENT : theme.text.muted}>{detail()}</text>
                     </box>
                   }
                 >
@@ -189,7 +205,7 @@ function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
                       {title()}
                     </text>
                     <text flexShrink={0} wrapMode="none" fg={overdue() ? URGENT : theme.text.muted}>
-                      {overdue() ? <b>{detail()}</b> : detail()}
+                      {detail()}
                     </text>
                   </box>
                 </Show>

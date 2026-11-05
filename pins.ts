@@ -10,6 +10,8 @@ export type Pin = {
   url: string
   stateName: string
   stateType: string
+  /** Linear's color for the state, such as #f2c94c. Missing on pins saved before it was stored. */
+  stateColor?: string
   pinnedAt: number
 }
 
@@ -21,6 +23,7 @@ export function toPin(issue: Issue, pinnedAt: number): Pin {
     url: issue.url,
     stateName: issue.state.name,
     stateType: issue.state.type,
+    stateColor: issue.state.color,
     pinnedAt,
   }
 }
@@ -83,4 +86,28 @@ export function describe(items: readonly Pin[], max: number, now: number) {
     return `- ${pin.identifier}: ${pin.title} [${pin.stateName}, pinned ${age(now - pin.pinnedAt)} ago]${overdue} ${pin.url}`
   })
   return [`Pinned Linear TODOs (${items.length}/${max}):`, ...lines].join("\n")
+}
+
+// Linear's default state colors, for pins saved before the color was stored.
+const DEFAULT_STATE_COLORS: Record<string, string> = {
+  triage: "#fc7840",
+  backlog: "#bec2c8",
+  unstarted: "#e2e2e2",
+  started: "#f2c94c",
+}
+
+// Stand-ins for Linear's state icons: dotted circle for backlog, empty for todo, half-filled for in progress.
+const STATE_ICONS: Record<string, string> = {
+  triage: "◇",
+  backlog: "◌",
+  unstarted: "○",
+  started: "◐",
+}
+
+/** The icon and color to show for a pin's state. */
+export function stateStyle(pin: Pick<Pin, "stateType" | "stateColor">) {
+  return {
+    icon: STATE_ICONS[pin.stateType] ?? "○",
+    color: pin.stateColor ?? DEFAULT_STATE_COLORS[pin.stateType] ?? DEFAULT_STATE_COLORS.unstarted!,
+  }
 }

@@ -8,6 +8,7 @@ Private OpenCode plugin that keeps up to 5 Linear issues pinned as your TODOs. T
   - `unpin` unpins issues without changing them in Linear.
 - **Act on a pin:** click it in the sidebar or on the home screen to mark it done (moves it to the team's first completed state), unpin it, or open it in Linear.
 - **Automatic removal:** every 60 seconds the server checks the pins against Linear. An issue is unpinned when it's completed, canceled, a duplicate, archived, or deleted. Nothing else removes a pin.
+- **State:** each pin shows its Linear state in Linear's color, with an icon: ◌ backlog, ○ todo, ◐ in progress.
 - **Overdue:** a pin that has been in the list for 24 hours or more turns bright red and is counted in the header.
 
 The list lives in the OpenCode server's plugin storage, so every directory, session and open TUI shows the same list.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { closedReason, createLinear, LinearError, parseReference, type Issue } from "./linear.ts"
-import { age, describe as describePins, findPin, isStale, maxPins, reconcile, STALE_AFTER_MS, toPin } from "./pins.ts"
+import { age, describe as describePins, findPin, isStale, maxPins, reconcile, STALE_AFTER_MS, stateStyle, toPin } from "./pins.ts"
 
 const issue = (overrides: Partial<Issue> & { stateType?: string; stateName?: string } = {}): Issue => ({
   id: overrides.id ?? "id-1",
@@ -176,5 +176,14 @@ describe("describe", () => {
     expect(text).toContain("- ENG-1: Fresh [Todo, pinned 1m ago] https")
     expect(text).toContain("- ENG-2: Old [Todo, pinned 1d ago] OVERDUE (pinned over 24h)")
     expect(describePins([], 5, 0)).toBe("No Linear TODOs are pinned (0/5).")
+  })
+})
+
+describe("stateStyle", () => {
+  test("uses the stored Linear color and an icon for the state type", () => {
+    expect(stateStyle({ stateType: "started", stateColor: "#123456" })).toEqual({ icon: "◐", color: "#123456" })
+    expect(stateStyle({ stateType: "backlog" })).toEqual({ icon: "◌", color: "#bec2c8" })
+    expect(stateStyle({ stateType: "unstarted" })).toEqual({ icon: "○", color: "#e2e2e2" })
+    expect(stateStyle({ stateType: "started" }).color).toBe("#f2c94c")
   })
 })
