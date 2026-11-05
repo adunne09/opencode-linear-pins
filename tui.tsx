@@ -90,19 +90,19 @@ function createTodos(ctx: Context) {
     })
   }
 
-  const actions = async (pin: Pin) => {
-    const choice = await ctx.ui.dialog.select({
-      title: `${pin.identifier} ${pin.title}`,
-      options: [
-        { title: "Mark done", value: "done" as const, description: "Move it to the team's done state in Linear" },
-        { title: "Unpin", value: "unpin" as const, description: "Remove it from the list, without changing Linear" },
-        { title: "Open in Linear", value: "open" as const },
-      ],
-    })
-    if (choice === "done") await complete(pin)
-    else if (choice === "unpin") await unpin(pin)
-    else if (choice === "open") openUrl(pin.url)
-  }
+  const actions = (pin: Pin) =>
+    ctx.ui.dialog.show(() => (
+      <ActionMenu
+        ctx={ctx}
+        title={`${pin.identifier} ${pin.title}`}
+        onPick={(choice) => {
+          ctx.ui.dialog.clear()
+          if (choice === "done") void complete(pin)
+          else if (choice === "unpin") void unpin(pin)
+          else openUrl(pin.url)
+        }}
+      />
+    ))
 
   const stopEvents = rpc().events.on("changed", (event) => {
     const closed = (event.data as { closed?: string[] }).closed
@@ -122,6 +122,62 @@ function createTodos(ctx: Context) {
 }
 
 type Todos = ReturnType<typeof createTodos>
+
+const ACTIONS = [
+  { title: "Mark done", value: "done" },
+  { title: "Unpin", value: "unpin" },
+  { title: "Open in Linear", value: "open" },
+] as const
+
+type Action = (typeof ACTIONS)[number]["value"]
+
+/** What to do with one pin. A plain list: the built-in select dialog always adds a search field. */
+function ActionMenu(props: { ctx: Context; title: string; onPick: (action: Action) => void }) {
+  const theme = props.ctx.theme
+  const [selected, setSelected] = createSignal(0)
+  const move = (step: number) => setSelected((index) => (index + step + ACTIONS.length) % ACTIONS.length)
+
+  props.ctx.keymap.layer(() => ({
+    mode: "modal",
+    priority: 10,
+    commands: [
+      { bind: "up", title: "Previous action", group: "Linear TODOs", run: () => move(-1) },
+      { bind: "down", title: "Next action", group: "Linear TODOs", run: () => move(1) },
+      { bind: "return", title: "Run action", group: "Linear TODOs", run: () => props.onPick(ACTIONS[selected()]!.value) },
+    ],
+  }))
+
+  return (
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between" gap={2}>
+        <text flexShrink={1} fg={theme.text.base}>
+          <b>{props.title}</b>
+        </text>
+        <text flexShrink={0} fg={theme.text.muted} onMouseUp={() => props.ctx.ui.dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <box>
+        <For each={ACTIONS}>
+          {(action, index) => {
+            const active = () => index() === selected()
+            return (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={active() ? theme.background.action.primary.focused : RGBA.fromInts(0, 0, 0, 0)}
+                onMouseOver={() => setSelected(index())}
+                onMouseUp={() => props.onPick(action.value)}
+              >
+                <text fg={active() ? theme.text.action.primary.focused : theme.text.base}>{action.title}</text>
+              </box>
+            )
+          }}
+        </For>
+      </box>
+    </box>
+  )
+}
 
 /** The pinned list. `wide` lays each pin out on one line, for the home screen. */
 function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
