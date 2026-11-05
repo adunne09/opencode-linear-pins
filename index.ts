@@ -50,8 +50,13 @@ export default Plugin.define({
       list: async () => ({ items: await read(), max, configured: Boolean(await apiKey()), ...(problem ? { problem } : {}) }),
       unpin: async (input) => {
         const { id } = input as { id: string }
-        await serial(async () => write((await read()).filter((pin) => pin.id !== id)))
-        await changed()
+        const removed = await serial(async () => {
+          const items = await read()
+          const next = items.filter((pin) => pin.id !== id)
+          if (next.length !== items.length) await write(next)
+          return next.length !== items.length
+        })
+        if (removed) await changed()
         return {}
       },
       complete: async (input) => {
@@ -100,27 +105,33 @@ export default Plugin.define({
     }
 
     await ctx.tool.transform((editor) => {
+      editor.namespace({
+        name: "linear_todos",
+        description: "The user's pinned Linear TODOs, shown in the OpenCode sidebar and home screen.",
+      })
+
       editor.add({
-        name: "linear_todos_list",
+        name: "list",
         description:
           "List the Linear issues pinned as the user's TODOs. They show in the OpenCode sidebar and home screen. Pins over 24 hours old are marked OVERDUE.",
         input: { type: "object", properties: {}, additionalProperties: false },
-        options: { codemode: false },
+        options: { namespace: "linear_todos" },
         execute: async () => ({ content: describe(await read(), max, Date.now()) }),
       })
 
       editor.add({
-        name: "linear_todos_pin",
+        name: "pin",
         description: `Pin Linear issues as the user's TODOs, shown in the OpenCode sidebar and home screen. At most ${max} can be pinned. Only open issues can be pinned; done, canceled, duplicate, archived and deleted issues are refused. Use this when the user asks to add something to their TODOs, today's list or their pins.`,
         input: referencesInput,
-        options: { codemode: false },
+        options: { namespace: "linear_todos" },
         execute: async (input, context) => {
           const { issues } = input as { issues: string[] }
           const client = await linear()
           const found = await Promise.all(issues.map(async (reference) => ({ reference, issue: await client.get(reference, context.signal) })))
           const notes: string[] = []
-          await serial(async () => {
+          const added = await serial(async () => {
             const items = await read()
+            let count = 0
             for (const { reference, issue } of found) {
               if (!issue) {
                 notes.push(`${reference}: not found in Linear`)
@@ -133,26 +144,29 @@ export default Plugin.define({
               else {
                 items.push(toPin(issue, Date.now()))
                 notes.push(`${issue.identifier}: pinned`)
+                count++
               }
             }
-            await write(items)
+            if (count) await write(items)
+            return count
           })
-          await changed()
+          if (added) await changed()
           return { content: [...notes, "", describe(await read(), max, Date.now())].join("\n") }
         },
       })
 
       editor.add({
-        name: "linear_todos_unpin",
+        name: "unpin",
         description:
           "Unpin Linear issues from the user's TODOs without changing them in Linear. Use this when the user asks to remove something from their TODOs.",
         input: referencesInput,
-        options: { codemode: false },
+        options: { namespace: "linear_todos" },
         execute: async (input) => {
           const { issues } = input as { issues: string[] }
           const notes: string[] = []
-          await serial(async () => {
-            let items = await read()
+          const removed = await serial(async () => {
+            const before = await read()
+            let items = before
             for (const reference of issues) {
               const pin = findPin(items, reference)
               if (!pin) {
@@ -162,9 +176,10 @@ export default Plugin.define({
               items = items.filter((item) => item.id !== pin.id)
               notes.push(`${pin.identifier}: unpinned`)
             }
-            await write(items)
+            if (items.length !== before.length) await write(items)
+            return before.length - items.length
           })
-          await changed()
+          if (removed) await changed()
           return { content: [...notes, "", describe(await read(), max, Date.now())].join("\n") }
         },
       })

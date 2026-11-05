@@ -2,10 +2,10 @@
 
 Private OpenCode plugin that keeps up to 5 Linear issues pinned as your TODOs. They show under **Linear TODOs** in the session sidebar and on the home screen, and OpenCode manages them with tools.
 
-- **Pin and unpin through OpenCode:** sessions get three tools. Ask OpenCode something like "pin ENG-42 to my TODOs" or "what's on my TODOs?".
-  - `linear_todos_list` lists the pins.
-  - `linear_todos_pin` pins issues by identifier (`ENG-123`) or URL. Closed issues are refused, and so is pinning past the limit.
-  - `linear_todos_unpin` unpins issues without changing them in Linear.
+- **Pin and unpin through OpenCode:** sessions get three Code Mode tools in the `linear_todos` namespace. Ask OpenCode something like "pin ENG-42 to my TODOs" or "what's on my TODOs?".
+  - `list` lists the pins.
+  - `pin` pins issues by identifier (`ENG-123`) or URL. Closed issues are refused, and so is pinning past the limit. Pinning an issue that's already pinned changes nothing.
+  - `unpin` unpins issues without changing them in Linear.
 - **Act on a pin:** click it in the sidebar or on the home screen to mark it done (moves it to the team's first completed state), unpin it, or open it in Linear.
 - **Automatic removal:** every 60 seconds the server checks the pins against Linear. An issue is unpinned when it's completed, canceled, a duplicate, archived, or deleted. Nothing else removes a pin.
 - **Overdue:** a pin that has been in the list for 24 hours or more turns bright red and is counted in the header.

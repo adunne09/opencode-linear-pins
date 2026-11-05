@@ -197,7 +197,7 @@ function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
             }}
           </For>
           <Show when={items().length === 0}>
-            <text fg={theme.text.muted}>Nothing pinned. Ask OpenCode to pin Linear issues as your TODOs.</text>
+            <text fg={theme.text.muted}>Nothing pinned</text>
           </Show>
           <Show when={todos.state()?.problem}>
             {(problem) => (
