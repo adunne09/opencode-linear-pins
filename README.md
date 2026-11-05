@@ -2,7 +2,7 @@
 
 Private OpenCode TUI plugin that keeps up to 5 Linear issues pinned in the session sidebar, under **Linear TODOs**.
 
-- **Pin issues:** click the section (or run `/pins`, or **Pin Linear issues** in the command palette). The modal lists your open assigned issues. Type to search every open issue in the workspace by title or ID. Press Enter or click a row to pin or unpin it.
+- **Pin issues:** click the section (or run `/todos`, or **Pin Linear issues** in the command palette). The modal lists your open assigned issues. Type to search every open issue in the workspace by title or ID. Press Enter or click a row to pin or unpin it.
 - **Act on a pin:** click it in the sidebar to mark it done (moves it to the team's first completed state), unpin it, or open it in Linear.
 - **Automatic removal:** every 60 seconds, and when the modal closes, pins are checked against Linear. An issue is unpinned when it's completed, canceled, a duplicate, archived, or deleted. Nothing else removes a pin.
 - **Overdue:** a pin that has been in the list for 24 hours or more turns bright red and is counted in the header.

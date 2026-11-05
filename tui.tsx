@@ -446,7 +446,7 @@ export default Plugin.define({
               description: "Search Linear and pin or unpin issues in the sidebar",
               group: "Linear",
               palette: true,
-              slash: { name: "pins" },
+              slash: { name: "todos" },
               run: () => void openPicker(),
             },
             {
