@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { closedReason, createLinear, LinearError, type Issue } from "./linear.ts"
-import { age, isStale, maxPins, reconcile, STALE_AFTER_MS, toPin } from "./pins.ts"
+import { closedReason, createLinear, LinearError, parseReference, type Issue } from "./linear.ts"
+import { age, describe as describePins, findPin, isStale, maxPins, reconcile, STALE_AFTER_MS, toPin } from "./pins.ts"
 
 const issue = (overrides: Partial<Issue> & { stateType?: string; stateName?: string } = {}): Issue => ({
   id: overrides.id ?? "id-1",
@@ -149,5 +149,32 @@ describe("createLinear", () => {
     const updated = await createLinear("key", fetcher).complete("id-1")
     expect(calls[1]!.variables).toEqual({ id: "id-1", stateId: "done" })
     expect(updated.state.name).toBe("Done")
+  })
+})
+
+describe("references", () => {
+  test("parseReference accepts identifiers, URLs and IDs", () => {
+    expect(parseReference(" eng-42 ")).toBe("ENG-42")
+    expect(parseReference("https://linear.app/acme/issue/ENG-42/start-the-thing")).toBe("ENG-42")
+    expect(parseReference("00000000-0000-4000-8000-000000000001")).toBe("00000000-0000-4000-8000-000000000001")
+  })
+  test("findPin matches by identifier in any case, URL or ID", () => {
+    const pin = toPin(issue({ id: "uuid-1", identifier: "ENG-1" }), 0)
+    expect(findPin([pin], "eng-1")).toBe(pin)
+    expect(findPin([pin], "https://linear.app/x/issue/ENG-1/slug")).toBe(pin)
+    expect(findPin([pin], "uuid-1")).toBe(pin)
+    expect(findPin([pin], "ENG-2")).toBeUndefined()
+  })
+})
+
+describe("describe", () => {
+  test("lists pins for the agent and flags overdue ones", () => {
+    const fresh = toPin(issue({ id: "a", identifier: "ENG-1", title: "Fresh" }), STALE_AFTER_MS)
+    const old = toPin(issue({ id: "b", identifier: "ENG-2", title: "Old" }), 0)
+    const text = describePins([fresh, old], 5, STALE_AFTER_MS + 60_000)
+    expect(text).toContain("Pinned Linear TODOs (2/5):")
+    expect(text).toContain("- ENG-1: Fresh [Todo, pinned 1m ago] https")
+    expect(text).toContain("- ENG-2: Old [Todo, pinned 1d ago] OVERDUE (pinned over 24h)")
+    expect(describePins([], 5, 0)).toBe("No Linear TODOs are pinned (0/5).")
   })
 })

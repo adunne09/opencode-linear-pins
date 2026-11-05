@@ -1,4 +1,4 @@
-import { closedReason, type Issue } from "./linear.ts"
+import { closedReason, parseReference, type Issue } from "./linear.ts"
 
 export const DEFAULT_MAX_PINS = 5
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000
@@ -66,4 +66,21 @@ export function reconcile(items: readonly Pin[], issues: ReadonlyMap<string, Iss
     kept.push(toPin(issue, pin.pinnedAt))
   }
   return { items: kept, closed }
+}
+
+/** Finds the pin a reference (ID, identifier or URL) points at. */
+export function findPin(items: readonly Pin[], reference: string) {
+  const wanted = parseReference(reference)
+  const raw = reference.trim()
+  return items.find((pin) => pin.id === raw || pin.identifier.toUpperCase() === wanted.toUpperCase() || pin.url === raw)
+}
+
+/** The list as the agent sees it. */
+export function describe(items: readonly Pin[], max: number, now: number) {
+  if (items.length === 0) return `No Linear TODOs are pinned (0/${max}).`
+  const lines = items.map((pin) => {
+    const overdue = isStale(pin, now) ? " OVERDUE (pinned over 24h)" : ""
+    return `- ${pin.identifier}: ${pin.title} [${pin.stateName}, pinned ${age(now - pin.pinnedAt)} ago]${overdue} ${pin.url}`
+  })
+  return [`Pinned Linear TODOs (${items.length}/${max}):`, ...lines].join("\n")
 }

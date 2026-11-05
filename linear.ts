@@ -86,6 +86,21 @@ export function createLinear(apiKey: string, fetcher: typeof fetch = fetch) {
       return data.searchIssues.nodes
     },
 
+    /** One issue by ID, identifier (ENG-123) or URL, or null when Linear can't find it. */
+    async get(reference: string, signal?: AbortSignal) {
+      try {
+        const data = await request<{ issue: Issue }>(
+          `query ($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`,
+          { id: parseReference(reference) },
+          signal,
+        )
+        return data.issue
+      } catch (error) {
+        if (error instanceof LinearError && error.kind === "not_found") return null
+        throw error
+      }
+    },
+
     /** The current state of each issue, keyed by ID. Issues that no longer exist map to null. */
     async lookup(ids: readonly string[], signal?: AbortSignal) {
       const result = new Map<string, Issue | null>()
@@ -131,6 +146,13 @@ export function createLinear(apiKey: string, fetcher: typeof fetch = fetch) {
 }
 
 export type Linear = ReturnType<typeof createLinear>
+
+/** Turns an issue URL into its identifier; IDs and identifiers pass through. */
+export function parseReference(reference: string) {
+  const trimmed = reference.trim()
+  const candidate = /linear\.app\/[^/]+\/issue\/([A-Za-z0-9]+-\d+)/.exec(trimmed)?.[1] ?? trimmed
+  return /^[A-Za-z0-9]+-\d+$/.test(candidate) ? candidate.toUpperCase() : trimmed
+}
 
 /** Why a pinned issue should leave the list, or undefined while it's still open. */
 export function closedReason(issue: Issue | null): string | undefined {
