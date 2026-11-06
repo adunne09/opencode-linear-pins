@@ -1,6 +1,6 @@
 # OpenCode Linear TODOs
 
-Private OpenCode plugin that keeps Linear issues pinned as your TODOs, with no limit on how many. They show under **Linear TODOs** in the session sidebar and on the home screen, and OpenCode manages them with tools.
+OpenCode plugin that keeps Linear issues pinned as your TODOs, with no limit on how many. They show under **Linear TODOs** in the session sidebar and on the home screen, and OpenCode manages them with tools.
 
 - **Pin and unpin through OpenCode:** sessions get three Code Mode tools in the `linear_todos` namespace. Ask OpenCode something like "pin ENG-42 to my TODOs" or "what's on my TODOs?".
   - `list` lists the pins.
