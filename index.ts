@@ -1,16 +1,17 @@
 import { Plugin } from "@opencode/plugin"
-import { closedReason, createLinear, LinearError } from "./linear.ts"
-import { describe, findPin, maxPins, reconcile, toPin, type Pin } from "./pins.ts"
+import { createLinear, LinearError } from "./linear.ts"
+import { addPins, describe, findPin, pinNote, reconcile, type Pin } from "./pins.ts"
 import { LinearTodosRpc } from "./rpc.ts"
 
 const POLL_MS = 60_000
 
-// The server loads one instance of the plugin per directory, all sharing one list. Every change reads and writes
-// storage inside this module-level queue, so concurrent tool calls and syncs can't drop each other's changes.
-let queue: Promise<unknown> = Promise.resolve()
+// The server loads one instance of the plugin per directory, all sharing one list, and a reload can briefly run a new
+// copy of this module beside the old one. Every change reads and writes storage inside one queue kept on globalThis,
+// so concurrent tool calls, clicks and syncs from any instance can't drop each other's changes.
+const shared = globalThis as { linearTodosQueue?: Promise<unknown> }
 const serial = <T>(task: () => Promise<T>) => {
-  const run = queue.then(task)
-  queue = run.catch(() => {})
+  const run = (shared.linearTodosQueue ?? Promise.resolve()).then(task)
+  shared.linearTodosQueue = run.catch(() => {})
   return run
 }
 
@@ -33,7 +34,6 @@ const referencesInput = {
 export default Plugin.define({
   id: "local.linear-pins",
   async setup(ctx) {
-    const max = maxPins(ctx.options)
     let problem: { text: string; auth: boolean } | undefined
 
     const read = async () => ((await ctx.storage.get("pins")) as { items?: Pin[] } | undefined)?.items ?? []
@@ -46,8 +46,25 @@ export default Plugin.define({
       return createLinear(key)
     }
 
+    /** Looks each reference up in Linear and pins the open issues. Changes nothing unless something new is pinned. */
+    const pin = async (references: readonly string[], signal?: AbortSignal) => {
+      const client = await linear()
+      const found = await Promise.all(references.map(async (reference) => ({ reference, issue: await client.get(reference, signal) })))
+      const { results, added } = await serial(async () => {
+        const next = addPins(await read(), found, Date.now())
+        if (next.added) await write(next.items)
+        return next
+      })
+      if (added) await changed()
+      return results
+    }
+
     const registration = await ctx.rpc.register(LinearTodosRpc, {
-      list: async () => ({ items: await read(), max, configured: Boolean(await apiKey()), ...(problem ? { problem } : {}) }),
+      list: async () => ({ items: await read(), configured: Boolean(await apiKey()), ...(problem ? { problem } : {}) }),
+      pin: async (input) => {
+        const [result] = await pin([(input as { reference: string }).reference])
+        return { ...result!, message: pinNote(result!) }
+      },
       unpin: async (input) => {
         const { id } = input as { id: string }
         const removed = await serial(async () => {
@@ -116,42 +133,18 @@ export default Plugin.define({
           "List the Linear issues pinned as the user's TODOs. They show in the OpenCode sidebar and home screen. Pins over 24 hours old are marked OVERDUE.",
         input: { type: "object", properties: {}, additionalProperties: false },
         options: { namespace: "linear_todos" },
-        execute: async () => ({ content: describe(await read(), max, Date.now()) }),
+        execute: async () => ({ content: describe(await read(), Date.now()) }),
       })
 
       editor.add({
         name: "pin",
-        description: `Pin Linear issues as the user's TODOs, shown in the OpenCode sidebar and home screen. At most ${max} can be pinned. Only open issues can be pinned; done, canceled, duplicate, archived and deleted issues are refused. Use this when the user asks to add something to their TODOs, today's list or their pins.`,
+        description:
+          "Pin Linear issues as the user's TODOs, shown in the OpenCode sidebar and home screen. Only open issues can be pinned; done, canceled, duplicate, archived and deleted issues are refused, and so are identifiers Linear can't find. Pinning an issue that's already pinned changes nothing. Use this when the user asks to add something to their TODOs, today's list or their pins.",
         input: referencesInput,
         options: { namespace: "linear_todos" },
         execute: async (input, context) => {
-          const { issues } = input as { issues: string[] }
-          const client = await linear()
-          const found = await Promise.all(issues.map(async (reference) => ({ reference, issue: await client.get(reference, context.signal) })))
-          const notes: string[] = []
-          const added = await serial(async () => {
-            const items = await read()
-            let count = 0
-            for (const { reference, issue } of found) {
-              if (!issue) {
-                notes.push(`${reference}: not found in Linear`)
-                continue
-              }
-              const reason = closedReason(issue)
-              if (reason) notes.push(`${issue.identifier}: not pinned, it's ${reason === "deleted" || reason === "archived" ? reason : reason.toLowerCase()}`)
-              else if (items.some((pin) => pin.id === issue.id)) notes.push(`${issue.identifier}: already pinned`)
-              else if (items.length >= max) notes.push(`${issue.identifier}: not pinned, the list is full (${max}/${max}). Unpin something first.`)
-              else {
-                items.push(toPin(issue, Date.now()))
-                notes.push(`${issue.identifier}: pinned`)
-                count++
-              }
-            }
-            if (count) await write(items)
-            return count
-          })
-          if (added) await changed()
-          return { content: [...notes, "", describe(await read(), max, Date.now())].join("\n") }
+          const results = await pin((input as { issues: string[] }).issues, context.signal)
+          return { content: [...results.map(pinNote), "", describe(await read(), Date.now())].join("\n") }
         },
       })
 
@@ -180,7 +173,7 @@ export default Plugin.define({
             return before.length - items.length
           })
           if (removed) await changed()
-          return { content: [...notes, "", describe(await read(), max, Date.now())].join("\n") }
+          return { content: [...notes, "", describe(await read(), Date.now())].join("\n") }
         },
       })
     })

@@ -1,6 +1,5 @@
 import { closedReason, parseReference, type Issue } from "./linear.ts"
 
-export const DEFAULT_MAX_PINS = 5
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000
 
 export type Pin = {
@@ -43,11 +42,6 @@ export function age(ms: number) {
   return rest ? `${days}d ${rest}h` : `${days}d`
 }
 
-export function maxPins(options: Readonly<Record<string, unknown>> | undefined) {
-  const value = options?.max
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : DEFAULT_MAX_PINS
-}
-
 /**
  * Applies fresh Linear data to the pins: closed issues drop out (with a note saying why) and open ones pick up
  * their latest title and state. Pins missing from `issues` weren't looked up and stay as they are.
@@ -79,13 +73,55 @@ export function findPin(items: readonly Pin[], reference: string) {
 }
 
 /** The list as the agent sees it. */
-export function describe(items: readonly Pin[], max: number, now: number) {
-  if (items.length === 0) return `No Linear TODOs are pinned (0/${max}).`
+export function describe(items: readonly Pin[], now: number) {
+  if (items.length === 0) return "No Linear TODOs are pinned."
   const lines = items.map((pin) => {
     const overdue = isStale(pin, now) ? " OVERDUE (pinned over 24h)" : ""
     return `- ${pin.identifier}: ${pin.title} [${pin.stateName}, pinned ${age(now - pin.pinnedAt)} ago]${overdue} ${pin.url}`
   })
-  return [`Pinned Linear TODOs (${items.length}/${max}):`, ...lines].join("\n")
+  return [`Pinned Linear TODOs (${items.length}):`, ...lines].join("\n")
+}
+
+export type PinResult =
+  | { reference: string; status: "not_found" }
+  | { reference: string; identifier: string; status: "pinned" | "already_pinned" }
+  | { reference: string; identifier: string; status: "closed"; reason: string }
+
+/**
+ * Adds the open issues among `found` to the pins. Issues Linear couldn't find, closed ones (done, canceled, duplicate,
+ * archived or deleted) and ones already pinned are left out, and each gets a result saying why.
+ */
+export function addPins(items: readonly Pin[], found: readonly { reference: string; issue: Issue | null }[], now: number) {
+  const next = [...items]
+  const results: PinResult[] = []
+  for (const { reference, issue } of found) {
+    if (!issue) {
+      results.push({ reference, status: "not_found" })
+      continue
+    }
+    const reason = closedReason(issue)
+    if (reason) results.push({ reference, identifier: issue.identifier, status: "closed", reason })
+    else if (next.some((pin) => pin.id === issue.id)) results.push({ reference, identifier: issue.identifier, status: "already_pinned" })
+    else {
+      next.push(toPin(issue, now))
+      results.push({ reference, identifier: issue.identifier, status: "pinned" })
+    }
+  }
+  return { items: next, results, added: next.length - items.length }
+}
+
+/** One line explaining a pin result, for the agent and for toasts. */
+export function pinNote(result: PinResult) {
+  switch (result.status) {
+    case "not_found":
+      return `${result.reference}: not found in Linear`
+    case "already_pinned":
+      return `${result.identifier}: already pinned`
+    case "pinned":
+      return `${result.identifier}: pinned`
+    case "closed":
+      return `${result.identifier}: not pinned, it's ${result.reason === "deleted" || result.reason === "archived" ? result.reason : result.reason.toLowerCase()}`
+  }
 }
 
 // Linear's default state colors, for pins saved before the color was stored.

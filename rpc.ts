@@ -7,8 +7,13 @@ const byId = { type: "object", properties: { id: { type: "string" } }, required:
 export const LinearTodosRpc = Rpc.define({
   id: "linear-todos",
   methods: {
-    /** `{ items: Pin[], max, configured, problem? }` */
+    /** `{ items: Pin[], configured, problem? }` */
     list: { input: empty, output: loose },
+    /** Looks the issue up in Linear and pins it if it's open. Returns a `PinResult` plus a `message`. */
+    pin: {
+      input: { type: "object", properties: { reference: { type: "string" } }, required: ["reference"], additionalProperties: false },
+      output: loose,
+    },
     unpin: { input: byId, output: loose },
     /** Moves the issue to its team's done state, then unpins it. Returns `{ state }`. */
     complete: { input: byId, output: loose },

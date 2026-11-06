@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { closedReason, createLinear, LinearError, parseReference, type Issue } from "./linear.ts"
-import { age, describe as describePins, findPin, isStale, maxPins, reconcile, STALE_AFTER_MS, stateStyle, toPin } from "./pins.ts"
+import { addPins, age, describe as describePins, findPin, isStale, pinNote, reconcile, STALE_AFTER_MS, stateStyle, toPin } from "./pins.ts"
 
 const issue = (overrides: Partial<Issue> & { stateType?: string; stateName?: string } = {}): Issue => ({
   id: overrides.id ?? "id-1",
@@ -76,12 +76,6 @@ describe("pins", () => {
     expect(age(3 * 3_600_000)).toBe("3h")
     expect(age(25 * 3_600_000)).toBe("1d 1h")
     expect(age(48 * 3_600_000)).toBe("2d")
-  })
-  test("max defaults to 5 and accepts a positive integer option", () => {
-    expect(maxPins(undefined)).toBe(5)
-    expect(maxPins({ max: 3 })).toBe(3)
-    expect(maxPins({ max: 0 })).toBe(5)
-    expect(maxPins({ max: "7" })).toBe(5)
   })
 })
 
@@ -171,11 +165,11 @@ describe("describe", () => {
   test("lists pins for the agent and flags overdue ones", () => {
     const fresh = toPin(issue({ id: "a", identifier: "ENG-1", title: "Fresh" }), STALE_AFTER_MS)
     const old = toPin(issue({ id: "b", identifier: "ENG-2", title: "Old" }), 0)
-    const text = describePins([fresh, old], 5, STALE_AFTER_MS + 60_000)
-    expect(text).toContain("Pinned Linear TODOs (2/5):")
+    const text = describePins([fresh, old], STALE_AFTER_MS + 60_000)
+    expect(text).toContain("Pinned Linear TODOs (2):")
     expect(text).toContain("- ENG-1: Fresh [Todo, pinned 1m ago] https")
     expect(text).toContain("- ENG-2: Old [Todo, pinned 1d ago] OVERDUE (pinned over 24h)")
-    expect(describePins([], 5, 0)).toBe("No Linear TODOs are pinned (0/5).")
+    expect(describePins([], 0)).toBe("No Linear TODOs are pinned.")
   })
 })
 
@@ -185,5 +179,51 @@ describe("stateStyle", () => {
     expect(stateStyle({ stateType: "backlog" })).toEqual({ icon: "◌", color: "#bec2c8" })
     expect(stateStyle({ stateType: "unstarted" })).toEqual({ icon: "○", color: "#e2e2e2" })
     expect(stateStyle({ stateType: "started" }).color).toBe("#f2c94c")
+  })
+})
+
+describe("addPins", () => {
+  const open = issue({ id: "a", identifier: "ENG-1" })
+  const done = issue({ id: "b", identifier: "ENG-2", stateType: "completed", stateName: "Done" })
+  const canceled = issue({ id: "c", identifier: "ENG-3", stateType: "canceled", stateName: "Canceled" })
+  const duplicate = issue({ id: "d", identifier: "ENG-4", stateType: "duplicate", stateName: "Duplicate" })
+  const archived = issue({ id: "e", identifier: "ENG-5", archivedAt: "2026-11-05T00:00:00Z" })
+  const deleted = issue({ id: "f", identifier: "ENG-6", trashed: true })
+
+  test("pins open issues and refuses missing and closed ones", () => {
+    const { items, results, added } = addPins(
+      [],
+      [
+        { reference: "eng-1", issue: open },
+        { reference: "ENG-404", issue: null },
+        { reference: "ENG-2", issue: done },
+        { reference: "ENG-3", issue: canceled },
+        { reference: "ENG-4", issue: duplicate },
+        { reference: "ENG-5", issue: archived },
+        { reference: "ENG-6", issue: deleted },
+      ],
+      1_000,
+    )
+    expect(added).toBe(1)
+    expect(items.map((pin) => pin.identifier)).toEqual(["ENG-1"])
+    expect(results.map(pinNote)).toEqual([
+      "ENG-1: pinned",
+      "ENG-404: not found in Linear",
+      "ENG-2: not pinned, it's done",
+      "ENG-3: not pinned, it's canceled",
+      "ENG-4: not pinned, it's duplicate",
+      "ENG-5: not pinned, it's archived",
+      "ENG-6: not pinned, it's deleted",
+    ])
+  })
+
+  test("has no limit, and pinning an already pinned issue adds nothing", () => {
+    const many = Array.from({ length: 12 }, (_, n) => toPin(issue({ id: `id-${n}`, identifier: `ENG-${n + 10}` }), 0))
+    const more = addPins(many, [{ reference: "ENG-1", issue: open }], 1)
+    expect(more.items).toHaveLength(13)
+    const again = addPins(more.items, [{ reference: "ENG-1", issue: open }], 2)
+    expect(again.added).toBe(0)
+    expect(again.results[0]!.status).toBe("already_pinned")
+    expect(again.items).toEqual(more.items)
   })
 })

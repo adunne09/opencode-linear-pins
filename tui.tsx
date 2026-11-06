@@ -12,7 +12,7 @@ const URGENT = RGBA.fromHex("#ff3b30")
 const ON_URGENT = RGBA.fromHex("#ffffff")
 const RETRY_MS = 5_000
 
-type State = { items: Pin[]; max: number; configured: boolean; problem?: { text: string; auth: boolean } }
+type State = { items: Pin[]; configured: boolean; problem?: { text: string; auth: boolean } }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -63,6 +63,38 @@ function createTodos(ctx: Context) {
     })
 
   const unpin = (pin: Pin) => run(`Couldn't unpin ${pin.identifier}`, () => rpc().unpin({ id: pin.id }, options()))
+
+  /**
+   * Asks for an issue and pins it. When Linear can't find it or it's closed, the dialog opens again with the reason
+   * and the text kept, until the issue is pinned or the dialog is dismissed.
+   */
+  const promptPin = async () => {
+    let value = ""
+    let problem: string | undefined
+    while (true) {
+      const entered = (
+        await ctx.ui.dialog.prompt({
+          title: "Pin a Linear issue",
+          description: problem ?? "Enter an issue ID such as ENG-123, or paste its Linear URL.",
+          placeholder: "ENG-123",
+          value,
+        })
+      )?.trim()
+      if (!entered) return
+      value = entered
+      try {
+        const result = (await rpc().pin({ reference: entered }, options())) as { status: string; message: string }
+        if (result.status === "pinned" || result.status === "already_pinned") {
+          toast(result.message, result.status === "pinned" ? "success" : "info")
+          await load()
+          return
+        }
+        problem = `${result.message}. Try another issue.`
+      } catch (error) {
+        problem = `${message(error)}. Try again.`
+      }
+    }
+  }
 
   const refresh = () =>
     run("Couldn't refresh", async () => {
@@ -118,7 +150,7 @@ function createTodos(ctx: Context) {
     clearTimeout(retry)
   }
 
-  return { state, unreachable, now, load, refresh, promptKey, actions, dispose }
+  return { state, unreachable, now, load, refresh, promptKey, promptPin, actions, dispose }
 }
 
 type Todos = ReturnType<typeof createTodos>
@@ -184,23 +216,28 @@ function TodoList(props: { ctx: Context; todos: Todos; wide?: boolean }) {
   const { ctx, todos } = props
   const theme = ctx.theme
   const items = () => todos.state()?.items ?? []
-  const max = () => todos.state()?.max ?? 5
   const configured = () => todos.state()?.configured ?? false
   const stale = () => items().filter((pin) => isStale(pin, todos.now())).length
 
   return (
     <box flexShrink={0}>
-      <text>
-        <span style={{ fg: theme.text.base }}>
-          <b>Linear TODOs</b>
-        </span>
-        <span style={{ fg: theme.text.muted }}>{configured() ? `  ${items().length}/${max()}` : ""}</span>
-        <Show when={configured() && stale()}>
-          <span style={{ fg: URGENT }}>
-            <b>{`  ${stale()} overdue`}</b>
+      <box flexDirection="row" justifyContent="space-between" gap={2}>
+        <text>
+          <span style={{ fg: theme.text.base }}>
+            <b>Linear TODOs</b>
           </span>
+          <Show when={configured() && stale()}>
+            <span style={{ fg: URGENT }}>
+              <b>{`  ${stale()} overdue`}</b>
+            </span>
+          </Show>
+        </text>
+        <Show when={configured()}>
+          <text flexShrink={0} fg={theme.text.action.primary.base} onMouseUp={() => void todos.promptPin()}>
+            <b>+</b>
+          </text>
         </Show>
-      </text>
+      </box>
       <Show when={todos.state()} fallback={<text fg={theme.text.muted}>{todos.unreachable() ? "Waiting for the OpenCode server…" : "Loading…"}</text>}>
         <Show
           when={configured()}
@@ -315,6 +352,14 @@ export default Plugin.define({
         ctx.keymap.layer(() => ({
           mode: "global",
           commands: [
+            {
+              id: "local.linear-pins.pin",
+              title: "Pin a Linear issue",
+              description: "Pin a Linear issue to your TODOs by its ID or URL",
+              group: "Linear",
+              slash: { name: "pin-linear-todo" },
+              run: () => void todos.promptPin(),
+            },
             {
               id: "local.linear-pins.refresh",
               title: "Refresh Linear TODOs",

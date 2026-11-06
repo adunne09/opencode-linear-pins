@@ -1,11 +1,12 @@
 # OpenCode Linear TODOs
 
-Private OpenCode plugin that keeps up to 5 Linear issues pinned as your TODOs. They show under **Linear TODOs** in the session sidebar and on the home screen, and OpenCode manages them with tools.
+Private OpenCode plugin that keeps Linear issues pinned as your TODOs, with no limit on how many. They show under **Linear TODOs** in the session sidebar and on the home screen, and OpenCode manages them with tools.
 
 - **Pin and unpin through OpenCode:** sessions get three Code Mode tools in the `linear_todos` namespace. Ask OpenCode something like "pin ENG-42 to my TODOs" or "what's on my TODOs?".
   - `list` lists the pins.
-  - `pin` pins issues by identifier (`ENG-123`) or URL. Closed issues are refused, and so is pinning past the limit. Pinning an issue that's already pinned changes nothing.
+  - `pin` pins issues by identifier (`ENG-123`) or URL. Issues Linear can't find, and done, canceled, duplicate, archived or deleted ones, are refused. Pinning an issue that's already pinned changes nothing.
   - `unpin` unpins issues without changing them in Linear.
+- **Pin from the TUI:** click **+** beside **Linear TODOs**, or run `/pin-linear-todo`, and enter an issue ID or URL. The server checks it with Linear and refuses it the same way the tool does; the dialog then reopens with the reason so you can fix it.
 - **Act on a pin:** click it in the sidebar or on the home screen to mark it done (moves it to the team's first completed state), unpin it, or open it in Linear.
 - **Automatic removal:** every 60 seconds the server checks the pins against Linear. An issue is unpinned when it's completed, canceled, a duplicate, archived, or deleted. Nothing else removes a pin.
 - **State:** each pin shows its Linear state in Linear's color, with an icon: ◌ backlog, ○ todo, ◐ in progress.
@@ -21,7 +22,6 @@ The plugin uses a Linear personal API key. The server reads `LINEAR_API_KEY` fro
 
 To set options, load the plugin with the object form instead of through the symlink below:
 
-- `max` (server, in `opencode.json(c)`): the most issues you can pin. Defaults to 5.
 - `position` (TUI, in `cli.json`): `"top"` puts the section first in the sidebar. Defaults to the bottom.
 
 ## Files
